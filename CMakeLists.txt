@@ -52,6 +52,7 @@ set(uv_test_sources
     test/test-fs-copyfile.c
     test/test-fs-event.c
     test/test-fs-poll.c
+    test/test-fs-readdir.c
     test/test-fs.c
     test/test-get-currentexe.c
     test/test-get-loadavg.c
