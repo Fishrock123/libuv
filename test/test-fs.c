@@ -2188,6 +2188,7 @@ TEST_IMPL(fs_utime) {
   double mtime;
   uv_fs_t req;
   int r;
+  int i;
 
   /* Setup. */
   loop = uv_default_loop();
@@ -2232,14 +2233,16 @@ TEST_IMPL(fs_utime) {
   uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(utime_cb_count == 1);
 
-  for (int i = 1; i <= 5; i++) {
+  for (i = 1; i <= 5; i++) {
     uv_stat_t *s;
+    double real_mtime;
+    double real_atime;
     r = uv_fs_stat(NULL, &req, path, NULL);
     ASSERT(r == 0);
     ASSERT(req.result == 0);
     s = &req.statbuf;
-    double real_atime = (unsigned long)s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0);
-    double real_mtime = (unsigned long)s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0);
+    real_atime = (unsigned long)s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0);
+    real_mtime = (unsigned long)s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0);
 
     r = uv_fs_utime(NULL, &req, path, (real_atime * 1000) + i, (real_mtime * 1000) + i, NULL);
     ASSERT(r == 0);
