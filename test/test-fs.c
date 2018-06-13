@@ -2238,8 +2238,8 @@ TEST_IMPL(fs_utime) {
     ASSERT(r == 0);
     ASSERT(req.result == 0);
     s = &req.statbuf;
-    double real_atime = s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0);
-    double real_mtime = s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0);
+    double real_atime = (unsigned long)s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0);
+    double real_mtime = (unsigned long)s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0);
 
     r = uv_fs_utime(NULL, &req, path, (real_atime * 1000) + i, (real_mtime * 1000) + i, NULL);
     ASSERT(r == 0);
