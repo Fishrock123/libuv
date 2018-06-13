@@ -2241,7 +2241,7 @@ TEST_IMPL(fs_utime) {
     double real_atime = s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0);
     double real_mtime = s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0);
 
-    r = uv_fs_utime(NULL, &req, path, real_atime + i, real_mtime + i, NULL);
+    r = uv_fs_utime(NULL, &req, path, (real_atime * 1000) + i, (real_mtime * 1000) + i, NULL);
     ASSERT(r == 0);
     ASSERT(req.result == 0);
     uv_fs_req_cleanup(&req);
@@ -2249,7 +2249,7 @@ TEST_IMPL(fs_utime) {
     r = uv_fs_stat(NULL, &req, path, NULL);
     ASSERT(r == 0);
     ASSERT(req.result == 0);
-    check_utime(path, real_atime + i, real_mtime + i);
+    check_utime(path, (real_atime * 1000) + i, (real_mtime * 1000) + i);
     uv_fs_req_cleanup(&req);
   }
 
