@@ -2232,32 +2232,17 @@ TEST_IMPL(fs_utime) {
   uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(utime_cb_count == 1);
 
-  // for (i = 1; i <= 5; i++) {
-    // uv_stat_t *s;
-    // double real_mtime;
-    // double real_atime;
-    // r = uv_fs_stat(NULL, &req, path, NULL);
-    // ASSERT(r == 0);
-    // ASSERT(req.result == 0);
-    // s = &req.statbuf;
-    // real_atime = (unsigned long)s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0);
-    // real_mtime = (unsigned long)s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0);
+  /* APFS rounding error */
+  r = uv_fs_utime(NULL, &req, path, 1529011085547.0, 1529011085547.0, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
 
-    // printf("# real_atime: %f\n", real_atime);
-    // printf("# real_mtime: %f\n", real_mtime);
-    // printf("# next mtime: %f\n", real_mtime + i);
-
-    r = uv_fs_utime(NULL, &req, path, 1529011085547.0, 1529011085547.0, NULL);
-    ASSERT(r == 0);
-    ASSERT(req.result == 0);
-    uv_fs_req_cleanup(&req);
-
-    r = uv_fs_stat(NULL, &req, path, NULL);
-    ASSERT(r == 0);
-    ASSERT(req.result == 0);
-    check_utime(path, 1529011085547.0, 1529011085547.0);
-    uv_fs_req_cleanup(&req);
-  // }
+  r = uv_fs_stat(NULL, &req, path, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  check_utime(path, 1529011085547.0, 1529011085547.0);
+  uv_fs_req_cleanup(&req);
 
   /* Cleanup. */
   unlink(path);
