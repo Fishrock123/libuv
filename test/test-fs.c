@@ -2188,7 +2188,6 @@ TEST_IMPL(fs_utime) {
   double mtime;
   uv_fs_t req;
   int r;
-  int i;
 
   /* Setup. */
   loop = uv_default_loop();
