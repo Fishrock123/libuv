@@ -2245,9 +2245,9 @@ TEST_IMPL(fs_utime) {
     real_mtime = (unsigned long)s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0);
 
     printf("# real_mtime: %f\n", real_mtime);
-    printf("# next mtime: %f\n", real_mtime + (i * 0.001));
+    printf("# next mtime: %f\n", real_mtime + (i * 0.1));
 
-    r = uv_fs_utime(NULL, &req, path, real_atime + (i * 0.001), real_mtime + (i * 0.001), NULL);
+    r = uv_fs_utime(NULL, &req, path, real_atime + (i * 0.1), real_mtime + (i * 0.1), NULL);
     ASSERT(r == 0);
     ASSERT(req.result == 0);
     uv_fs_req_cleanup(&req);
@@ -2255,7 +2255,7 @@ TEST_IMPL(fs_utime) {
     r = uv_fs_stat(NULL, &req, path, NULL);
     ASSERT(r == 0);
     ASSERT(req.result == 0);
-    check_utime(path, real_atime + (i * 0.001), real_mtime + (i * 0.001));
+    check_utime(path, real_atime + (i * 0.1), real_mtime + (i * 0.1));
     uv_fs_req_cleanup(&req);
   }
 
