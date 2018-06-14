@@ -702,8 +702,8 @@ static void check_utime(const char* path, double atime, double mtime) {
   ASSERT(req.result == 0);
   s = &req.statbuf;
 
-  ASSERT(s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0) == atime);
-  ASSERT(s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0) == mtime);
+  ASSERT((unsigned long)s->st_atim.tv_sec + (s->st_atim.tv_nsec / 1000000000.0) == atime);
+  ASSERT((unsigned long)s->st_mtim.tv_sec + (s->st_mtim.tv_nsec / 1000000000.0) == mtime);
 
   uv_fs_req_cleanup(&req);
 }
@@ -2231,6 +2231,19 @@ TEST_IMPL(fs_utime) {
   ASSERT(r == 0);
   uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(utime_cb_count == 1);
+
+  /* APFS rounding error */
+  /* See http://www.openradar.me/33734892 */
+  r = uv_fs_utime(NULL, &req, path, 1529011085547.0, 1529011085547.0, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
+
+  r = uv_fs_stat(NULL, &req, path, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  check_utime(path, 1529011085547.0, 1529011085547.0);
+  uv_fs_req_cleanup(&req);
 
   /* Cleanup. */
   unlink(path);
