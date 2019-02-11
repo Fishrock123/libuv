@@ -37,9 +37,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-static uv_dir_t opendir_req;
-static uv_dir_t readdir_req;
-static uv_dir_t closedir_req;
+static uv_dir_t dir;
 
 static uv_dirent_t dirents[1];
 
@@ -48,12 +46,12 @@ static int empty_readdir_cb_count;
 static int empty_closedir_cb_count;
 
 static void empty_closedir_cb(uv_dir_t* req) {
-  ASSERT(req == &closedir_req);
+  ASSERT(req == &dir);
   ++empty_closedir_cb_count;
 }
 
 static void empty_readdir_cb(uv_dir_t* req) {
-  ASSERT(req == &readdir_req);
+  ASSERT(req == &dir);
   ASSERT(req->fs_type == UV_FS_READDIR);
 
   /* TODO jgilli: by default, uv_fs_readdir doesn't return 0 when reading
@@ -72,6 +70,8 @@ static void empty_readdir_cb(uv_dir_t* req) {
 
     ++empty_readdir_cb_count;
 
+    uv_fs_req_cleanup((uv_fs_t*) req);
+
     uv_fs_readdir(uv_default_loop(),
                   req,
                   dirents,
@@ -87,10 +87,12 @@ static void empty_readdir_cb(uv_dir_t* req) {
 }
 
 static void empty_opendir_cb(uv_dir_t* req) {
-  ASSERT(req == &opendir_req);
+  ASSERT(req == &dir);
   ASSERT(req->fs_type == UV_FS_OPENDIR);
   ASSERT(req->result == 0);
   ASSERT(req->dir != NULL);
+
+  uv_fs_req_cleanup((uv_fs_t*) req);
   ASSERT(0 == uv_fs_readdir(uv_default_loop(),
                             req,
                             dirents,
@@ -113,7 +115,6 @@ TEST_IMPL(fs_readdir_empty_dir) {
   int nb_entries_read;
   int entry_idx;
   size_t entries_count;
-  uv_dir_t* dir;
 
   path = "./empty_dir/";
 
@@ -121,29 +122,27 @@ TEST_IMPL(fs_readdir_empty_dir) {
   uv_fs_req_cleanup(&mkdir_req);
 
   /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
+  memset(&dir, 0xdb, sizeof(dir));
 
   /* Testing the synchronous flavor */
   r = uv_fs_opendir(uv_default_loop(),
-                    &opendir_req,
+                    &dir,
                     path,
                     NULL);
   ASSERT(r == 0);
-  ASSERT(opendir_req.fs_type == UV_FS_OPENDIR);
-  ASSERT(opendir_req.result == 0);
-  ASSERT(opendir_req.dir != NULL);
+  ASSERT(dir.fs_type == UV_FS_OPENDIR);
+  ASSERT(dir.result == 0);
+  ASSERT(dir.dir != NULL);
+  uv_fs_req_cleanup((uv_fs_t*) &dir);
 
-  dir = &opendir_req;
-  uv_fs_dir_cleanup(&opendir_req);
-
-  /* Fill the req to ensure that required fields are cleaned up */
-  memset(&dir, 0xdb, sizeof(dir));
   entries_count = 0;
   nb_entries_read = uv_fs_readdir(uv_default_loop(),
-                                  dir,
+                                  &dir,
                                   dirents,
                                   ARRAY_SIZE(dirents),
                                   NULL);
+  uv_fs_req_cleanup((uv_fs_t*) &dir);
+
   while (0 != nb_entries_read) {
     entry_idx = 0;
     while (entry_idx < nb_entries_read) {
@@ -158,11 +157,12 @@ TEST_IMPL(fs_readdir_empty_dir) {
     }
 
     nb_entries_read =  uv_fs_readdir(uv_default_loop(),
-                                     dir,
+                                     &dir,
                                      dirents,
                                      ARRAY_SIZE(dirents),
                                      NULL);
   }
+  uv_fs_req_cleanup((uv_fs_t*) &dir);
 
   /*
    * TODO jgilli: by default, uv_fs_readdir doesn't return UV_EOF when reading
@@ -171,19 +171,16 @@ TEST_IMPL(fs_readdir_empty_dir) {
    */
   ASSERT(entries_count == 2);
 
-  uv_fs_dir_cleanup(&readdir_req);
-
-  uv_fs_closedir(uv_default_loop(), dir, NULL);
-  ASSERT(closedir_req.result == 0);
+  uv_fs_closedir(uv_default_loop(), &dir, NULL);
+  ASSERT(dir.result == 0);
+  uv_fs_dir_cleanup(&dir);
 
   /* Testing the asynchronous flavor */
 
   /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
-  memset(&readdir_req, 0xdb, sizeof(readdir_req));
-  memset(&closedir_req, 0xdb, sizeof(closedir_req));
+  memset(&dir, 0xdb, sizeof(dir));
 
-  r = uv_fs_opendir(uv_default_loop(), &opendir_req, path, empty_opendir_cb);
+  r = uv_fs_opendir(uv_default_loop(), &dir, path, empty_opendir_cb);
   ASSERT(r == 0);
 
   ASSERT(empty_opendir_cb_count == 0);
@@ -209,7 +206,7 @@ TEST_IMPL(fs_readdir_empty_dir) {
 static int non_existing_opendir_cb_count;
 
 static void non_existing_opendir_cb(uv_dir_t* req) {
-  ASSERT(req == &opendir_req);
+  ASSERT(req == &dir);
   ASSERT(req->fs_type == UV_FS_OPENDIR);
   ASSERT(req->result == UV_ENOENT);
   ASSERT(req->dir == NULL);
@@ -225,29 +222,24 @@ TEST_IMPL(fs_readdir_non_existing_dir) {
   path = "./non-existing-dir/";
 
   /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
+  memset(&dir, 0xdb, sizeof(dir));
 
   /* Testing the synchronous flavor */
-  r = uv_fs_opendir(uv_default_loop(), &opendir_req, path, NULL);
+  r = uv_fs_opendir(uv_default_loop(), &dir, path, NULL);
 
   ASSERT(r == UV_ENOENT);
-  ASSERT(opendir_req.fs_type == UV_FS_OPENDIR);
-  ASSERT(opendir_req.result == UV_ENOENT);
-  ASSERT(opendir_req.dir == NULL);
-
-  uv_fs_dir_cleanup(&opendir_req);
-
-  /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
+  ASSERT(dir.fs_type == UV_FS_OPENDIR);
+  ASSERT(dir.result == UV_ENOENT);
+  ASSERT(dir.dir == NULL);
+  uv_fs_req_cleanup((uv_fs_t*) &dir);
 
   /* Testing the async flavor */
-  r = uv_fs_opendir(uv_default_loop(), &opendir_req, path,
+  r = uv_fs_opendir(uv_default_loop(), &dir, path,
                     non_existing_opendir_cb);
   ASSERT(r == 0);
   ASSERT(non_existing_opendir_cb_count == 0);
   uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(non_existing_opendir_cb_count == 1);
-  uv_fs_dir_cleanup(&opendir_req);
 
   MAKE_VALGRIND_HAPPY();
   return 0;
@@ -261,7 +253,7 @@ TEST_IMPL(fs_readdir_non_existing_dir) {
 static int file_opendir_cb_count;
 
 static void file_opendir_cb(uv_dir_t* req) {
-  ASSERT(req == &opendir_req);
+  ASSERT(req == &dir);
   ASSERT(req->fs_type == UV_FS_OPENDIR);
   ASSERT(req->result == UV_ENOTDIR);
   ASSERT(req->dir == NULL);
@@ -277,23 +269,22 @@ TEST_IMPL(fs_readdir_file) {
   path = "test/fixtures/empty_file";
 
   /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
+  memset(&dir, 0xdb, sizeof(dir));
 
   /* Testing the synchronous flavor */
-  r = uv_fs_opendir(uv_default_loop(), &opendir_req, path, NULL);
+  r = uv_fs_opendir(uv_default_loop(), &dir, path, NULL);
 
   ASSERT(r == UV_ENOTDIR);
-  ASSERT(opendir_req.fs_type == UV_FS_OPENDIR);
-  ASSERT(opendir_req.result == UV_ENOTDIR);
-  ASSERT(opendir_req.dir == NULL);
-
-  uv_fs_dir_cleanup(&opendir_req);
+  ASSERT(dir.fs_type == UV_FS_OPENDIR);
+  ASSERT(dir.result == UV_ENOTDIR);
+  ASSERT(dir.dir == NULL);
+  uv_fs_req_cleanup((uv_fs_t*) &dir);
 
   /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
+  memset(&dir, 0xdb, sizeof(dir));
 
   /* Testing the async flavor */
-  r = uv_fs_opendir(uv_default_loop(), &opendir_req, path, file_opendir_cb);
+  r = uv_fs_opendir(uv_default_loop(), &dir, path, file_opendir_cb);
   ASSERT(r == 0);
 
   ASSERT(file_opendir_cb_count == 0);
@@ -301,8 +292,6 @@ TEST_IMPL(fs_readdir_file) {
   uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(file_opendir_cb_count == 1);
-
-  uv_fs_dir_cleanup(&opendir_req);
 
   MAKE_VALGRIND_HAPPY();
   return 0;
@@ -319,14 +308,14 @@ static int non_empty_readdir_cb_count;
 static int non_empty_closedir_cb_count;
 
 static void non_empty_closedir_cb(uv_dir_t* req) {
-  ASSERT(req == &closedir_req);
+  ASSERT(req == &dir);
   ASSERT(req->result == 0);
 
   ++non_empty_closedir_cb_count;
 }
 
 static void non_empty_readdir_cb(uv_dir_t* req) {
-  ASSERT(req == &readdir_req);
+  ASSERT(req == &dir);
   ASSERT(req->fs_type == UV_FS_READDIR);
 
   // TODO jgilli: by default, uv_fs_readdir doesn't return UV_EOF when reading
@@ -334,6 +323,7 @@ static void non_empty_readdir_cb(uv_dir_t* req) {
   // Should this be fixed to mimic uv_fs_scandir's behavior?
   if (req->result == 0) {
     ASSERT(non_empty_readdir_cb_count == 5);
+    uv_fs_req_cleanup((uv_fs_t*) req);
     uv_fs_closedir(uv_default_loop(), req,
                    non_empty_closedir_cb);
   } else {
@@ -354,27 +344,26 @@ static void non_empty_readdir_cb(uv_dir_t* req) {
 
     ++non_empty_readdir_cb_count;
 
+    uv_fs_req_cleanup((uv_fs_t*) req);
     uv_fs_readdir(uv_default_loop(),
                   req,
                   dirents,
                   ARRAY_SIZE(dirents),
                   non_empty_readdir_cb);
   }
-
-  uv_fs_dir_cleanup(req);
 }
 
 static void non_empty_opendir_cb(uv_dir_t* req) {
-  ASSERT(req == &opendir_req);
+  ASSERT(req == &dir);
   ASSERT(req->fs_type == UV_FS_OPENDIR);
   ASSERT(req->result == 0);
   ASSERT(req->dir != NULL);
+  uv_fs_req_cleanup((uv_fs_t*) req);
   ASSERT(0 == uv_fs_readdir(uv_default_loop(),
                             req,
                             dirents,
                             ARRAY_SIZE(dirents),
                             non_empty_readdir_cb));
-  uv_fs_dir_cleanup(req);
   ++non_empty_opendir_cb_count;
 }
 
@@ -386,8 +375,6 @@ TEST_IMPL(fs_readdir_non_empty_dir) {
   uv_fs_t rmdir_req;
   uv_fs_t create_req;
   uv_fs_t close_req;
-
-  uv_dir_t* dir;
 
   /* Setup */
   unlink("test_dir/file1");
@@ -420,24 +407,23 @@ TEST_IMPL(fs_readdir_non_empty_dir) {
   ASSERT(r == 0);
 
   /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
+  memset(&dir, 0xdb, sizeof(dir));
 
   /* Testing the synchronous flavor */
-  r = uv_fs_opendir(uv_default_loop(), &opendir_req, "test_dir", NULL);
+  r = uv_fs_opendir(uv_default_loop(), &dir, "test_dir", NULL);
 
   ASSERT(r == 0);
-  ASSERT(opendir_req.fs_type == UV_FS_OPENDIR);
-  ASSERT(opendir_req.result == 0);
-  ASSERT(opendir_req.dir != NULL);
+  ASSERT(dir.fs_type == UV_FS_OPENDIR);
+  ASSERT(dir.result == 0);
+  ASSERT(dir.dir != NULL);
+  uv_fs_req_cleanup((uv_fs_t*) &dir);
   // TODO jgilli: by default, uv_fs_readdir doesn't return UV_EOF when reading
   // an empty dir. Instead, it returns "." and ".." entries in sequence.
   // Should this be changed to mimic uv_fs_scandir's behavior?
   entries_count = 0;
 
-  memset(&readdir_req, 0xdb, sizeof(opendir_req));
-  dir = &readdir_req;
   while (uv_fs_readdir(uv_default_loop(),
-                       &readdir_req,
+                       &dir,
                        dirents,
                        ARRAY_SIZE(dirents),
                        NULL) != 0) {
@@ -456,17 +442,18 @@ TEST_IMPL(fs_readdir_non_empty_dir) {
   }
 
   ASSERT(entries_count == 5);
-  uv_fs_dir_cleanup(&readdir_req);
+  uv_fs_req_cleanup((uv_fs_t*) &dir);
 
-  uv_fs_closedir(uv_default_loop(), dir, NULL);
-  ASSERT(closedir_req.result == 0);
+  uv_fs_closedir(uv_default_loop(), &dir, NULL);
+  ASSERT(dir.result == 0);
+  uv_fs_dir_cleanup(&dir);
 
   /* Testing the asynchronous flavor */
 
   /* Fill the req to ensure that required fields are cleaned up */
-  memset(&opendir_req, 0xdb, sizeof(opendir_req));
+  memset(&dir, 0xdb, sizeof(dir));
 
-  r = uv_fs_opendir(uv_default_loop(), &opendir_req, "test_dir",
+  r = uv_fs_opendir(uv_default_loop(), &dir, "test_dir",
                     non_empty_opendir_cb);
   ASSERT(r == 0);
 
