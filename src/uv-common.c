@@ -612,7 +612,7 @@ uv_dirent_type_t uv__fs_get_dirent_type(uv__dirent_t* dent) {
   return type;
 }
 
-void uv__fs_readdir_cleanup(uv_fs_t* req) {
+void uv__fs_readdir_cleanup(uv_dir_t* req) {
   uv_dirent_t* dirents;
   unsigned int dirent_idx;
 

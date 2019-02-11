@@ -314,6 +314,7 @@ typedef void (*uv_idle_cb)(uv_idle_t* handle);
 typedef void (*uv_exit_cb)(uv_process_t*, int64_t exit_status, int term_signal);
 typedef void (*uv_walk_cb)(uv_handle_t* handle, void* arg);
 typedef void (*uv_fs_cb)(uv_fs_t* req);
+typedef void (*uv_dir_cb)(uv_dir_t* req);
 typedef void (*uv_work_cb)(uv_work_t* req);
 typedef void (*uv_after_work_cb)(uv_work_t* req, int status);
 typedef void (*uv_getaddrinfo_cb)(uv_getaddrinfo_t* req,
@@ -1199,24 +1200,32 @@ typedef enum {
   UV_FS_CLOSEDIR
 } uv_fs_type;
 
-struct uv_dir_s {
-  UV_DIR_PRIVATE_FIELDS
-};
+#define UV_FS_FIELDS                                                          \
+  /* public */                                                                \
+  uv_fs_type fs_type;                                                         \
+  uv_loop_t* loop;                                                            \
+  uv_fs_cb cb;                                                                \
+  ssize_t result;                                                             \
+  void* ptr;                                                                  \
+  const char* path;                                                           \
+  uv_stat_t statbuf; /* Stores the result of uv_fs_{f}stat(). */              \
+  /* private */                                                               \
+  UV_FS_PRIVATE_FIELDS                                                        \
 
 /* uv_fs_t is a subclass of uv_req_t. */
 struct uv_fs_s {
   UV_REQ_FIELDS
-  uv_fs_type fs_type;
-  uv_loop_t* loop;
-  uv_fs_cb cb;
-  ssize_t result;
-  void* ptr;
-  const char* path;
-  uv_stat_t statbuf;  /* Stores the result of uv_fs_stat() and uv_fs_fstat(). */
-  uv_dir_t* dir; /* Stores the result of uv_fs_opendir() */
+  UV_FS_FIELDS
+};
+
+/* uv_dir_t is a subclass of uv_fs_t. */
+struct uv_dir_s {
+  UV_REQ_FIELDS
+  UV_FS_FIELDS
   uv_dirent_t* dirents;
   size_t nentries;
-  UV_FS_PRIVATE_FIELDS
+  uv_dir_cb _cb;
+  UV_DIR_PRIVATE_FIELDS
 };
 
 UV_EXTERN uv_fs_type uv_fs_get_type(const uv_fs_t*);
@@ -1226,6 +1235,7 @@ UV_EXTERN const char* uv_fs_get_path(const uv_fs_t*);
 UV_EXTERN uv_stat_t* uv_fs_get_statbuf(uv_fs_t*);
 
 UV_EXTERN void uv_fs_req_cleanup(uv_fs_t* req);
+UV_EXTERN void uv_fs_dir_cleanup(uv_dir_t* req);
 UV_EXTERN int uv_fs_close(uv_loop_t* loop,
                           uv_fs_t* req,
                           uv_file file,
@@ -1299,19 +1309,17 @@ UV_EXTERN int uv_fs_scandir(uv_loop_t* loop,
 UV_EXTERN int uv_fs_scandir_next(uv_fs_t* req,
                                  uv_dirent_t* ent);
 UV_EXTERN int uv_fs_opendir(uv_loop_t* loop,
-                            uv_fs_t* req,
+                            uv_dir_t* req,
                             const char* path,
-                            uv_fs_cb cb);
+                            uv_dir_cb cb);
 UV_EXTERN int uv_fs_readdir(uv_loop_t* loop,
-                            uv_fs_t* req,
-                            uv_dir_t* dir,
+                            uv_dir_t* req,
                             uv_dirent_t dirents[],
                             size_t ndirents,
-                            uv_fs_cb cb);
+                            uv_dir_cb cb);
 UV_EXTERN int uv_fs_closedir(uv_loop_t* loop,
-                             uv_fs_t* req,
-                             uv_dir_t* dir,
-                             uv_fs_cb cb);
+                             uv_dir_t* req,
+                             uv_dir_cb cb);
 UV_EXTERN int uv_fs_stat(uv_loop_t* loop,
                          uv_fs_t* req,
                          const char* path,

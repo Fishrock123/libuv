@@ -375,37 +375,29 @@ static ssize_t uv__fs_scandir(uv_fs_t* req) {
   return n;
 }
 
-static int uv__fs_opendir(uv_fs_t* req) {
-  req->dir = uv__malloc(sizeof(uv_dir_t));
-
-  if (req->dir == NULL)
+static int uv__fs_opendir(uv_dir_t* req) {
+  if (req == NULL)
     return -1;
 
-  req->dir->dir = opendir(req->path);
-
-  if (req->dir->dir == NULL) {
-    uv__free(req->dir);
-    req->dir = NULL;
-    return -1;
-  }
+  req->dir = opendir(req->path);
 
   return 0;
 }
 
-static int uv__fs_readdir(uv_fs_t* req) {
+static int uv__fs_readdir(uv_dir_t* req) {
   uv_dirent_t* dirent;
   struct dirent* res;
   unsigned int dirent_idx;
 
+  assert(req != NULL);
   assert(req->dir != NULL);
-  assert(req->dir->dir != NULL);
   assert(req->dirents != NULL);
 
   for (dirent_idx = 0; dirent_idx < req->nentries; ++dirent_idx) {
     /* readdir() returns NULL on end of directory, as well as on error. errno
        is used to differentiate between the two conditions. */
     errno = 0;
-    res = readdir(req->dir->dir);
+    res = readdir(req->dir);
 
     if (errno != 0) {
       return -1;
@@ -428,17 +420,21 @@ static int uv__fs_readdir(uv_fs_t* req) {
   return dirent_idx;
 }
 
-static int uv__fs_closedir(uv_fs_t* req) {
-  assert(req->dir != NULL);
+static int uv__fs_closedir(uv_dir_t* req) {
+  assert(req != NULL);
 
-  if (req->dir->dir != NULL) {
-    closedir(req->dir->dir);
-    req->dir->dir = NULL;
+  if (req->dir != NULL) {
+    closedir(req->dir);
+    req->dir = NULL;
   }
 
-  uv__free(req->dir);
-  req->dir = NULL;
   return 0;
+}
+
+/* A hack to get around the lack of Generics in C. */
+void uv__dir_fs_cb(uv_fs_t* req) {
+  uv_dir_t* dir = (uv_dir_t*) req;
+  dir->_cb(dir);
 }
 
 #if defined(_POSIX_PATH_MAX)
@@ -1252,9 +1248,9 @@ static void uv__fs_work(struct uv__work* w) {
     X(OPEN, uv__fs_open(req));
     X(READ, uv__fs_read(req));
     X(SCANDIR, uv__fs_scandir(req));
-    X(OPENDIR, uv__fs_opendir(req));
-    X(READDIR, uv__fs_readdir(req));
-    X(CLOSEDIR, uv__fs_closedir(req));
+    X(OPENDIR, uv__fs_opendir((uv_dir_t*) req));
+    X(READDIR, uv__fs_readdir((uv_dir_t*) req));
+    X(CLOSEDIR, uv__fs_closedir((uv_dir_t*) req));
     X(READLINK, uv__fs_readlink(req));
     X(REALPATH, uv__fs_realpath(req));
     X(RENAME, rename(req->path, req->new_path));
@@ -1526,33 +1522,38 @@ int uv_fs_scandir(uv_loop_t* loop,
 }
 
 int uv_fs_opendir(uv_loop_t* loop,
-                  uv_fs_t* req,
+                  uv_dir_t* _req,
                   const char* path,
-                  uv_fs_cb cb) {
+                  uv_dir_cb _cb) {
+  uv_fs_t* req = (uv_fs_t*) _req;
+  _req->_cb = _cb;
+  uv_fs_cb cb = uv__dir_fs_cb;
   INIT(OPENDIR);
   PATH;
   POST;
 }
 
 int uv_fs_readdir(uv_loop_t* loop,
-                  uv_fs_t* req,
-                  uv_dir_t* dir,
+                  uv_dir_t* _req,
                   uv_dirent_t dirents[],
                   size_t ndirents,
-                  uv_fs_cb cb) {
+                  uv_dir_cb _cb) {
+  uv_fs_t* req = (uv_fs_t*) _req;
+  _req->_cb = _cb;
+  uv_fs_cb cb = uv__dir_fs_cb;
   INIT(READDIR);
-  req->dir = dir;
-  req->dirents = dirents;
-  req->nentries = ndirents;
+  _req->dirents = dirents;
+  _req->nentries = ndirents;
   POST;
 }
 
 int uv_fs_closedir(uv_loop_t* loop,
-                   uv_fs_t* req,
-                   uv_dir_t* dir,
-                   uv_fs_cb cb) {
+                   uv_dir_t* _req,
+                   uv_dir_cb _cb) {
+  uv_fs_t* req = (uv_fs_t*) _req;
+  _req->_cb = _cb;
+  uv_fs_cb cb = uv__dir_fs_cb;
   INIT(CLOSEDIR);
-  req->dir = dir;
   POST;
 }
 
@@ -1679,6 +1680,9 @@ int uv_fs_write(uv_loop_t* loop,
   POST;
 }
 
+void uv_fs_dir_cleanup(uv_dir_t* req) {
+  uv_fs_req_cleanup((uv_fs_t*) req);
+}
 
 void uv_fs_req_cleanup(uv_fs_t* req) {
   if (req == NULL)
@@ -1699,7 +1703,7 @@ void uv_fs_req_cleanup(uv_fs_t* req) {
     uv__fs_scandir_cleanup(req);
 
   if (req->fs_type == UV_FS_READDIR && req->ptr != NULL)
-    uv__fs_readdir_cleanup(req);
+    uv__fs_readdir_cleanup((uv_dir_t*) req);
 
   if (req->bufs != req->bufsml)
     uv__free(req->bufs);
